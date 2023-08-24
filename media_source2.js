@@ -2,24 +2,50 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const OperationType = {
-  ADD: 0,
-  REMOVE: 1,
-  MARK_EOS: 2,
-};
-
 class SourceBuffer2 {
   constructor(sourceBuffer) {
     this.sourceBuffer = sourceBuffer;
   }
 
+  get sourceBuffer() {
+    return this.sourceBuffer;
+  }
 
+  runEventLoop() {
+    // Each updateend event allows a new operation to kick off.
+  }
+
+  setTimestampOffset(timestampOffset) {
+    // Add operation.
+  }
+
+  setAppendWindow(appendWindowStart, appendWindowEnd) {
+    // Add operation.
+  }
+
+  appendBuffer(data, signal) {
+    // Add operation. Subscribe to abort signal to wire up abort().
+  }
+
+  remove(start, end) {
+    // Add operation.
+  }
+
+  changeType(type) {
+    // Add operation.
+  }
 
   // Simple passthrough methods.
   audioTracks = this.sourceBuffer.audioTracks;
   videoTracks = this.sourceBuffer.videoTracks;
   buffered = this.sourceBuffer.buffered;
 }
+
+const OperationType = {
+  ADD: 0,
+  REMOVE: 1,
+  MARK_EOS: 2,
+};
 
 class MediaSource2 {
   constructor() {
