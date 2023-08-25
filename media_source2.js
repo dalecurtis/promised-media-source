@@ -2,39 +2,170 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+const SourceBufferOperationTypes = {
+  CONFIGURE: 0,
+  APPEND: 2,
+  REMOVE: 3,
+  CHANGE_TYPE: 4,
+};
+
 class SourceBuffer2 {
+  #currentOperation;
+  #errorEvent;
   #sourceBuffer;
+  #pendingOperations;
 
   constructor(sb) {
     this.#sourceBuffer = sb;
+    this.#sourceBuffer.addEventListener('error', e => {
+      this.#errorEvent = e;
+      this.#runEventLoop();
+    });
+    this.#pendingOperations = [];
   }
 
-  get sourceBuffer() {
-    return this.#sourceBuffer;
+  #runEventLoop() {
+    while (this.#pendingOperations.length > 0) {
+      if (this.#errorEvent) {
+        if (this.#currentOperation)
+          this.currentOperation.reject(this.#errorEvent);
+        let op = this.#pendingOperations.shift();
+        op.reject(this.#errorEvent);
+        continue;
+      }
+
+      if (this.#currentOperation) {
+        return;
+      }
+
+      if (this.#sourceBuffer.updating) {
+        let op = this.#pendingOperations.shift();
+        op.reject(new DOMException('External source of updates detected.',
+                                   'InvalidStateError'));
+        return;
+      }
+
+      // If readyState is closed or ended, the operations below will throw.
+      let op = this.#pendingOperations.shift();
+      console.log('SourceBuffer2.runEventLoop: ' + op.operationType);
+      try {
+        switch (op.operationType) {
+          case SourceBufferOperationTypes.APPEND: {
+            this.#sourceBuffer.addEventListener('updateend', _ => {
+              this.#currentOperation = null;
+              op.resolve();
+              this.#runEventLoop();
+            }, { once: true });
+            this.#sourceBuffer.appendBuffer(op.buffer);
+            this.#currentOperation = op;
+            break;
+          }
+
+          case SourceBufferOperationTypes.REMOVE: {
+            this.#sourceBuffer.addEventListener('updateend', _ => {
+              this.#currentOperation = null;
+              op.resolve();
+              this.#runEventLoop();
+            }, { once: true });
+            console.log(op.start, op.end);
+            this.#sourceBuffer.remove(op.start, op.end);
+            this.#currentOperation = op;
+            break;
+          }
+
+          case SourceBufferOperationTypes.CONFIGURE: {
+            if ('timestampOffset' in op.options) {
+              this.#sourceBuffer.timestampOffset =
+                  op.options['timestampOffset'];
+            }
+            if ('appendWindowStart' in op.options) {
+              this.#sourceBuffer.appendWindowStart =
+                  op.options['appendWindowStart'];
+            }
+            if ('appendWindowEnd' in op.options) {
+              this.#sourceBuffer.appendWindowEnd =
+                  op.options['appendWindowEnd'];
+            }
+            if ('mode' in op.options) {
+              this.#sourceBuffer.mode = op.options['mode'];
+            }
+            op.resolve();
+            break;
+          }
+
+          case SourceBufferOperationTypes.CHANGE_TYPE: {
+            this.#sourceBuffer.changeType(op.sourceBufferType);
+            op.resolve();
+            break;
+          }
+        }
+      } catch (e) {
+        op.reject(e);
+      }
+    }
   }
 
-  runEventLoop() {
-    // Each updateend event allows a new operation to kick off.
+  // {timestampOffset:, mode:, appendWindowStart:, appendWindowEnd:}
+  configure(configureOptions) {
+    return new Promise((resolvePromise, rejectPromise) => {
+      this.#pendingOperations.push({
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        operationType: SourceBufferOperationTypes.CONFIGURE,
+        options: configureOptions,
+      });
+      this.#runEventLoop();
+    });
   }
 
-  setTimestampOffset(timestampOffset) {
-    // Add operation.
+  appendBuffer(data) {
+    return new Promise((resolvePromise, rejectPromise) => {
+      this.#pendingOperations.push({
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        operationType: SourceBufferOperationTypes.APPEND,
+        buffer: data,
+      });
+      this.#runEventLoop();
+    });
   }
 
-  setAppendWindow(appendWindowStart, appendWindowEnd) {
-    // Add operation.
-  }
-
-  appendBuffer(data, signal) {
-    // Add operation. Subscribe to abort signal to wire up abort().
-  }
-
-  remove(start, end) {
-    // Add operation.
+  remove(startRange, endRange) {
+    return new Promise((resolvePromise, rejectPromise) => {
+      this.#pendingOperations.push({
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        operationType: SourceBufferOperationTypes.REMOVE,
+        start: startRange,
+        end: endRange,
+      });
+      this.#runEventLoop();
+    });
   }
 
   changeType(type) {
-    // Add operation.
+    return new Promise((resolvePromise, rejectPromise) => {
+      this.#pendingOperations.push({
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        operationType: SourceBufferOperationTypes.CHANGE_TYPE,
+        sourceBufferType: type,
+      });
+      this.#runEventLoop();
+    });
+  }
+
+  async abort() {
+    // Invalid state for calling abort(), so let underlying SB throw.
+    if (this.#errorEvent) {
+      this.#sourceBuffer.abort();
+      return;
+    }
+
+    this.#errorEvent = new DOMException('abort() called', 'AbortError');
+    this.#runEventLoop();
+    this.#sourceBuffer.abort();
+    this.#errorEvent = null;
   }
 
   // Simple passthrough methods.
@@ -70,8 +201,8 @@ class MediaSource2 {
     this.#pendingOperations = [];
   }
 
-  // It'd be better if we could only expose only `handle()`, but unfortunately that
-  // doesn't yet work with non-worker mse.
+  // It'd be better if we could only expose only `handle()`, but unfortunately
+  // that doesn't yet work with non-worker mse.
   get mediaSource() {
     return this.#source;
   }
@@ -83,9 +214,9 @@ class MediaSource2 {
         return;
       }
 
-      // If readyState is closed or ended, the operations below will throw exceptions.
+      // If readyState is closed or ended, the operations below will throw.
       let op = this.#pendingOperations[0];
-      console.log('runEventLoop: ' + op.operationType);
+      console.log('MediaSource2.runEventLoop: ' + op.operationType);
       try {
         switch (op.operationType) {
           case MediaSourceOperationTypes.ADD: {
@@ -112,7 +243,7 @@ class MediaSource2 {
               }
             }
 
-            this.#source.addEventListener('sourceend', _ => {
+            this.#source.addEventListener('sourceended', _ => {
               op.resolve();
             }, { once: true });
             this.#pendingOperations.shift();
