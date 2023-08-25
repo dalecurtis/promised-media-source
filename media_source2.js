@@ -40,14 +40,13 @@ class SourceBuffer2 {
 
       if (this.#sourceBuffer.updating) {
         let op = this.#pendingOperations.shift();
-        op.reject(new DOMException('External source of updates detected.',
-                                   'InvalidStateError'));
+        op.reject(new DOMException(
+            'External source of updates detected.', 'InvalidStateError'));
         return;
       }
 
       // If readyState is closed or ended, the operations below will throw.
       let op = this.#pendingOperations.shift();
-      console.log('SourceBuffer2.runEventLoop: ' + op.operationType);
       try {
         switch (op.operationType) {
           case SourceBufferOperationTypes.APPEND: {
@@ -55,7 +54,7 @@ class SourceBuffer2 {
               this.#currentOperation = null;
               op.resolve();
               this.#runEventLoop();
-            }, { once: true });
+            }, {once: true});
             this.#sourceBuffer.appendBuffer(op.buffer);
             this.#currentOperation = op;
             break;
@@ -66,7 +65,7 @@ class SourceBuffer2 {
               this.#currentOperation = null;
               op.resolve();
               this.#runEventLoop();
-            }, { once: true });
+            }, {once: true});
             console.log(op.start, op.end);
             this.#sourceBuffer.remove(op.start, op.end);
             this.#currentOperation = op;
@@ -197,7 +196,10 @@ class MediaSource2 {
     this.#source.addEventListener('sourceopen', _ => {
       this.#opened = true;
       this.#runEventLoop();
-    }, { once: true });
+    }, {once: true});
+    this.#source.addEventListener('sourceclose', _ => {
+      this.#runEventLoop();
+    });
     this.#pendingOperations = [];
   }
 
@@ -216,7 +218,6 @@ class MediaSource2 {
 
       // If readyState is closed or ended, the operations below will throw.
       let op = this.#pendingOperations[0];
-      console.log('MediaSource2.runEventLoop: ' + op.operationType);
       try {
         switch (op.operationType) {
           case MediaSourceOperationTypes.ADD: {
@@ -238,14 +239,14 @@ class MediaSource2 {
               if (sb.updating) {
                 sb.addEventListener('updateend', _ => {
                   this.#runEventLoop();
-                }, { once: true });
+                }, {once: true});
                 return;
               }
             }
 
             this.#source.addEventListener('sourceended', _ => {
               op.resolve();
-            }, { once: true });
+            }, {once: true});
             this.#pendingOperations.shift();
             this.#source.endOfStream(op.error);
             break;
@@ -305,5 +306,6 @@ class MediaSource2 {
   static isTypeSupported(type) {
     return MediaSource.isTypeSupported(type);
   }
-  static canConstructInDedicatedWorker = MediaSource.canConstructInDedicatedWorker;
+  static canConstructInDedicatedWorker =
+      MediaSource.canConstructInDedicatedWorker;
 };
