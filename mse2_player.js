@@ -71,6 +71,8 @@ async function processFetch(stream, mediaSource, sourceBuffer) {
     if (++appendCount >= parseInt(QueryString.abort)) {
       console.log('SourceBuffer aborted.');
       sourceBuffer.abort();
+      sourceBuffer.configure(
+          {timestampOffset: 0, appendWindowStart: 0, appenWindowEnd: Infinity});
       done = true;
     }
 
