@@ -35,14 +35,26 @@ interface SourceBuffer {
     Promise<void> appendBuffer(SharedBufferSource data);
     Promise<void> remove(double start, unrestricted double end);
     Promise<void> changeType(DOMString type);
+    Promive<void> configure(SourceBufferOptions);
 
     [RaisesException] void abort();
 };
+
+dictionary SourceBufferOptions {
+    AppendMode mode;
+    double timestampOffset;
+    double appendWindowStart;
+    double appendWindowEnd;
+};
+
 ```
 
 These largely function as before except all promise based methods put a message
-into a queue for processing. These are processed in order. abort() grows a new
-ability to purge the queue and reject all pending promises.
+into a queue for processing; messages are processed in order.
+
+The biggest changes that aren't promise related:
+* `abort()` now purges the message queue in addition to resetting parser.
+* `configure()` replaces individual setters for things which control `appendBuffer`.
 
 Using MediaSource for a simple case can look like this:
 ```JavaScript
@@ -107,3 +119,5 @@ video.src = window.URL.createObjectURL(mediaSource2.mediaSource);
 * Is too much asynchronous now?
   * `addSourceBuffer` / `removeSourceBuffer` could be synchronous if some sort
   of class level Promise like `MediaSource2.ready` was added.
+  * `configure()` offers no getters for the timestamp offset or append window,
+  which may be needed in some cases?
