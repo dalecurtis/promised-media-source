@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 class SourceBuffer2 {
-  constructor(sourceBuffer) {
-    this.sourceBuffer = sourceBuffer;
+  #sourceBuffer;
+
+  constructor(sb) {
+    this.#sourceBuffer = sb;
   }
 
   get sourceBuffer() {
-    return this.sourceBuffer;
+    return this.#sourceBuffer;
   }
 
   runEventLoop() {
@@ -36,74 +38,85 @@ class SourceBuffer2 {
   }
 
   // Simple passthrough methods.
-  audioTracks = this.sourceBuffer.audioTracks;
-  videoTracks = this.sourceBuffer.videoTracks;
-  buffered = this.sourceBuffer.buffered;
+  get audioTracks() {
+    return this.#sourceBuffer.audioTracks;
+  }
+  get videoTracks() {
+    return this.#sourceBuffer.videoTracks;
+  }
+  get buffered() {
+    return this.#sourceBuffer.buffered;
+  }
 }
 
-const OperationType = {
+const MediaSourceOperationTypes = {
   ADD: 0,
   REMOVE: 1,
   MARK_EOS: 2,
 };
 
 class MediaSource2 {
+  #opened;
+  #source;
+  #pendingOperations;
+
   constructor() {
-    this.opened = false;
-    this.source = new MediaSource();
-    this.source.addEventListener('sourceopen', _ => {
-      this.opened = true;
-      this.runEventLoop();
+    this.#opened = false;
+    this.#source = new MediaSource();
+    this.#source.addEventListener('sourceopen', _ => {
+      this.#opened = true;
+      this.#runEventLoop();
     }, { once: true });
-    this.pendingOperations = [];
+    this.#pendingOperations = [];
   }
 
   // It'd be better if we could only expose only `handle()`, but unfortunately that
   // doesn't yet work with non-worker mse.
   get mediaSource() {
-    return this.source;
+    return this.#source;
   }
 
-  runEventLoop() {
-    while (!this.pendingOperations.empty()) {
-      if (this.source.readyState == 'closed' && !this.opened) {
+  #runEventLoop() {
+    while (this.#pendingOperations.length > 0) {
+      if (this.#source.readyState == 'closed' && !this.#opened) {
         // Waiting for the source to be connected to an element.
         return;
       }
 
       // If readyState is closed or ended, the operations below will throw exceptions.
+      let op = this.#pendingOperations[0];
+      console.log('runEventLoop: ' + op.operationType);
       try {
-        let op = this.pendingOperations[0];
         switch (op.operationType) {
-          case OperationType.ADD: {
-            let sb = this.source.addSourceBuffer(op.sourceBufferType);
+          case MediaSourceOperationTypes.ADD: {
+            let sb = this.#source.addSourceBuffer(op.sourceBufferType);
             op.resolve(new SourceBuffer2(sb));
             break;
           }
 
-          case OperationType.REMOVE: {
+          case MediaSourceOperationTypes.REMOVE: {
             let sb = op.sourceBuffer.sourceBuffer();
             this.source.removeSourceBuffer(sb);
             op.resolve();
             break;
           }
 
-          case OperationType.MARK_EOS: {
-            for (let i = 0; i < this.source.sourceBuffers.length; ++i) {
-              let sb = this.source.sourceBuffers[i];
+          case MediaSourceOperationTypes.MARK_EOS: {
+            for (let i = 0; i < this.#source.sourceBuffers.length; ++i) {
+              let sb = this.#source.sourceBuffers[i];
               if (sb.updating) {
                 sb.addEventListener('updateend', _ => {
-                  this.runEventLoop();
+                  this.#runEventLoop();
                 }, { once: true });
                 return;
               }
             }
 
-            this.source.addEventListener('sourceend', _ => {
+            this.#source.addEventListener('sourceend', _ => {
               op.resolve();
             }, { once: true });
-            this.pendingOperations.shift();
-            this.source.endOfStream(op.error);
+            this.#pendingOperations.shift();
+            this.#source.endOfStream(op.error);
             break;
           }
         }
@@ -111,43 +124,43 @@ class MediaSource2 {
         op.reject(e);
       }
 
-      this.pendingOperations.shift();
+      this.#pendingOperations.shift();
     }
   }
 
   addSourceBuffer(type) {
     return new Promise((resolvePromise, rejectPromise) => {
-      this.pendingOperation.push({
+      this.#pendingOperations.push({
         resolve: resolvePromise,
         reject: rejectPromise,
-        operationType: OperationType.ADD,
+        operationType: MediaSourceOperationTypes.ADD,
         sourceBufferType: type,
       });
-      this.runEventLoop();
+      this.#runEventLoop();
     });
   }
 
   removeSourceBuffer(sb) {
     return new Promise((resolvePromise, rejectPromise) => {
-      this.pendingOperation.push({
+      this.#pendingOperations.push({
         resolve: resolvePromise,
         reject: rejectPromise,
-        operationType: OperationType.REMOVE,
+        operationType: MediaSourceOperationTypes.REMOVE,
         sourceBuffer: sb,
       });
-      this.runEventLoop();
+      this.#runEventLoop();
     });
   }
 
-  setEndOfStream(error) {
+  endOfStream(error) {
     return new Promise((resolvePromise, rejectPromise) => {
-      this.pendingOperation.push({
+      this.#pendingOperations.push({
         resolve: resolvePromise,
         reject: rejectPromise,
-        operationType: OperationType.MARK_EOS,
+        operationType: MediaSourceOperationTypes.MARK_EOS,
         error: error,
       });
-      this.runEventLoop();
+      this.#runEventLoop();
     });
   }
 
