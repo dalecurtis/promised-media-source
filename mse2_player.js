@@ -20,12 +20,14 @@ const QueryString = function() {
 }();
 
 var appendsComplete = false;
+var signalQuotaReady = null;
 
 const COMMAND_MAP = {
   'abort': 'Integer number of appends before calling SourceBuffer.abort()',
   'gc': 'Integer number of seconds to remove (should be keyframe distance) ' +
       'after double that amount of time elapses',
   'type': 'One of the types from the table below',
+  'remove': 'Remove the source buffer upon end of stream'
 };
 
 const TYPE_MAP = {
@@ -49,10 +51,25 @@ async function processFetch(stream, mediaSource, sourceBuffer) {
   while (true) {
     let {done, value} = await reader.read();
     if (value && value.length > 0) {
-      await sourceBuffer.appendBuffer(value);
+      while (true) {
+        try {
+          await sourceBuffer.appendBuffer(value);
+          break;
+        } catch (e) {
+          if (e.name === 'QuotaExceededError') {
+            let quotaAvailable = new Promise((resolve, _) => {
+              signalQuotaReady = resolve;
+            });
+            await quotaAvailable;
+          } else {
+            throw e;
+          }
+        };
+      }
     }
 
     if (++appendCount >= parseInt(QueryString.abort)) {
+      console.log('SourceBuffer aborted.');
       sourceBuffer.abort();
       done = true;
     }
@@ -109,9 +126,22 @@ document.addEventListener('DOMContentLoaded', _ => {
           if (appendsComplete) {
             mediaSource2.endOfStream();
           }
+          if (signalQuotaReady !== null) {
+            signalQuotaReady();
+            signalQuotaReady = null;
+          }
         });
       }
     });
+  }
+
+  if (QueryString.remove) {
+    video.addEventListener('ended', async _ => {
+      let sourceBuffer = await sbReady;
+      mediaSource2.removeSourceBuffer(sourceBuffer).then(_ => {
+        console.log('SourceBuffer removed.');
+      });
+    }, {once: true});
   }
 
   video.src = window.URL.createObjectURL(mediaSource2.mediaSource);

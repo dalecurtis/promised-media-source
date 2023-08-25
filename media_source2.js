@@ -24,6 +24,11 @@ class SourceBuffer2 {
     this.#pendingOperations = [];
   }
 
+  // Would be nice to hide this, but it's needed for removeSourceBuffer().
+  get sourceBuffer() {
+    return this.#sourceBuffer;
+  }
+
   #runEventLoop() {
     while (this.#pendingOperations.length > 0) {
       if (this.#errorEvent) {
@@ -66,7 +71,6 @@ class SourceBuffer2 {
               op.resolve();
               this.#runEventLoop();
             }, {once: true});
-            console.log(op.start, op.end);
             this.#sourceBuffer.remove(op.start, op.end);
             this.#currentOperation = op;
             break;
@@ -227,8 +231,8 @@ class MediaSource2 {
           }
 
           case MediaSourceOperationTypes.REMOVE: {
-            let sb = op.sourceBuffer.sourceBuffer();
-            this.source.removeSourceBuffer(sb);
+            let sb = op.sourceBuffer.sourceBuffer;
+            this.#source.removeSourceBuffer(sb);
             op.resolve();
             break;
           }
