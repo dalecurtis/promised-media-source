@@ -114,6 +114,7 @@ document.addEventListener('DOMContentLoaded', _ => {
   fetch(QueryString.src).then(response => response.body).then(async rs => {
     let sourceBuffer = await sbReady;
     processFetch(rs, mediaSource2, sourceBuffer);
+    mediaSource2.setDuration(50);
   });
 
   let video = document.querySelector('video');

@@ -19,6 +19,7 @@ interface MediaSource2 {
     Promise<SourceBuffer> addSourceBuffer(DOMString type);
     Promise<void> removeSourceBuffer(SourceBuffer buffer);
     Promise<void> endOfStream(optional EndOfStreamError error);
+    Promise<void> setDuration(unrestricted double duration);
 
     [RaisesException] void setLiveSeekableRange(double start, double end);
     [RaisesException] void clearLiveSeekableRange();
@@ -57,6 +58,7 @@ into a queue for processing; messages are processed in order.
 The biggest changes that aren't promise related:
 * `abort()` now purges the message queue in addition to resetting parser.
 * `configure()` replaces individual setters for things which control `appendBuffer`.
+* `duration` is now split into a readonly attribute and setter.
 
 Using MediaSource for a simple case can look like this:
 ```JavaScript

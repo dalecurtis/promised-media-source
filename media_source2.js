@@ -187,6 +187,7 @@ const MediaSourceOperationTypes = {
   ADD: 0,
   REMOVE: 1,
   MARK_EOS: 2,
+  SET_DURATION: 3,
 };
 
 class MediaSource2 {
@@ -255,6 +256,17 @@ class MediaSource2 {
             this.#source.endOfStream(op.error);
             break;
           }
+
+          case MediaSourceOperationTypes.SET_DURATION: {
+            // FIXME: This can trigger `updateend` events if duration triggers
+            // the removal algorithm in some UA (though no longer allowed by
+            // spec). A UA provided MediaSource2 API wouldn't allow this though,
+            // so for now this polyfill just has code above which explodes if
+            // `updating` is unexpectedly detected in each SourceBuffer.
+            this.#source.duration = op.duration;
+            op.resolve();
+            break;
+          }
         }
       } catch (e) {
         op.reject(e);
@@ -295,6 +307,18 @@ class MediaSource2 {
         reject: rejectPromise,
         operationType: MediaSourceOperationTypes.MARK_EOS,
         error: error,
+      });
+      this.#runEventLoop();
+    });
+  }
+
+  setDuration(dur) {
+    return new Promise((resolvePromise, rejectPromise) => {
+      this.#pendingOperations.push({
+        resolve: resolvePromise,
+        reject: rejectPromise,
+        operationType: MediaSourceOperationTypes.SET_DURATION,
+        duration: dur,
       });
       this.#runEventLoop();
     });
