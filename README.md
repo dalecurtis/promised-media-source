@@ -23,6 +23,8 @@ interface MediaSource2 {
     [RaisesException] void setLiveSeekableRange(double start, double end);
     [RaisesException] void clearLiveSeekableRange();
 
+    readonly attribute unrestricted double duration;
+
     static boolean isTypeSupported(DOMString type);
     static readonly attribute boolean canConstructInDedicatedWorker;
 };
