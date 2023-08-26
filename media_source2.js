@@ -300,6 +300,10 @@ class MediaSource2 {
     });
   }
 
+  get duration() {
+    return this.#source.duration;
+  }
+
   // Simple passthrough methods.
   setLiveSeekableRange(start, end) {
     return this.setLiveSeekableRange(start, end);

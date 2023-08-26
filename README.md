@@ -121,3 +121,5 @@ video.src = window.URL.createObjectURL(mediaSource2.mediaSource);
   of class level Promise like `MediaSource2.ready` was added.
   * `configure()` offers no getters for the timestamp offset or append window,
   which may be needed in some cases?
+* duration setting isn't supported since some UA will trigger the removal
+  algorithm even though that's no longer spec compliant.
